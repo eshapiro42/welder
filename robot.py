@@ -141,7 +141,7 @@ class Controller():
         '''Start the control loop'''
         integral = 0
         last_error = 0
-        Kp = .5
+        Kp = 1
         Ki = .5
         start_time = time.time()
         while not self.movement.done:
@@ -185,9 +185,13 @@ class Robot():
         fig, (ax1, ax2, ax3) = plt.subplots(3, 1)
         ax1.plot(self.path.x, self.path.y, c='black')
         ax2.set_xlim(0, 100)
+        ax3.set_xlim(0, 100)
 
         def controller_toggle(event):
+            idx = self.movement.current_idx
+            line_x = self.movement.x[idx]
             self.controller.toggle()
+            ax3.axvline(x=line_x)
             controller_btn.label.set_text('Turn control loop {}'.format('off' if self.controller.on else 'on'))
 
         controller_btn = Button(ax3, 'Turn control loop on') 
