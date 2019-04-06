@@ -17,10 +17,10 @@ class Path():
         x (np.array): NumPy array of linearly spaced x-coordinates.
         y (np.array): NumPy array of corresponding y-coordinates.
     '''
-    def __init__(self, num):
+    def __init__(self, slope, num):
         self.num = num
         self.x = np.linspace(0, 100, num=self.num)
-        self.y = .1 * self.x
+        self.y = slope * self.x
 
 
 class Movement():
@@ -131,6 +131,12 @@ class Controller():
         self.delay = delay
         self.on = False
 
+    def toggle(self):
+        if self.on:
+            self.on = False
+        else:
+            self.on = True
+
     def start(self):
         '''Start the control loop'''
         integral = 0
@@ -169,18 +175,25 @@ class Robot():
     '''
     def __init__(self, num, standard_error, freq):
         self.delay = 1 / freq
-        self.path = Path(num=num)
+        self.path = Path(num=num, slope=.1)
         self.movement = Movement(path=self.path, standard_error=standard_error, delay=self.delay)
         self.sensor = Sensor(path=self.path, movement=self.movement, delay=self.delay)
         self.controller = Controller(sensor=self.sensor, movement=self.movement, delay=self.delay)
 
     def plot(self):
         '''Plot the current state'''
-        fig, (ax1, ax2) = plt.subplots(2, 1)
+        fig, (ax1, ax2, ax3) = plt.subplots(3, 1)
         ax1.plot(self.path.x, self.path.y, c='black')
+        ax2.set_xlim(0, 100)
+
+        def controller_toggle(event):
+            self.controller.toggle()
+            controller_btn.label.set_text('Turn control loop {}'.format('off' if self.controller.on else 'on'))
+
+        controller_btn = Button(ax3, 'Turn control loop on') 
+        controller_btn.on_clicked(controller_toggle)
+
         while not self.movement.done:
-            if self.movement.halfway:
-                self.controller.on = True
             idx = self.movement.current_idx
             ax1.scatter(self.movement.x[idx], self.movement.y[idx], c='blue')
             ax2.scatter(self.movement.x[idx], abs(self.sensor.error), c='red')
@@ -206,5 +219,5 @@ class Robot():
 
 
 if __name__ == '__main__':
-    robot = Robot(num=1000, standard_error=.05, freq=100)
+    robot = Robot(num=1000, standard_error=.05, freq=50)
     robot.start()
