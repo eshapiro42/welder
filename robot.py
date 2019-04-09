@@ -1,3 +1,6 @@
+import argparse
+import hashlib
+import json
 import random
 import time
 import threading
@@ -11,7 +14,7 @@ class Path():
 
     Args:
         num (int): Number of points along the path.
-    
+
     Attributes
         num (int): Number of points along the path.
         x (np.array): NumPy array of linearly spaced x-coordinates.
@@ -34,11 +37,11 @@ class Movement():
     Attributes:
         path (Path): Expected welding path.
         movement_error (float): Standard deviation of the arm's error (which is normally distributed).
-        delay (float): Time in seconds between evaluations.  
+        delay (float): Time in seconds between evaluations.
         current_idx (int): Current index in the path array.
         control (float): The suggested adjustment by the control loop.
         halfway (bool): Whether the job is at least halfway completed.
-        done (bool): Whether the job is completed.     
+        done (bool): Whether the job is completed.
         x (np.array): The x-coordinates of the arm.
         y (np.array): The y-coordinates of the arm.
     '''
@@ -53,7 +56,7 @@ class Movement():
         self.x = self.path.x
         self.y = np.zeros(path.num)
         self.y[0] = self.path.y[0]
-    
+
     def next(self):
         '''Calculate the next coordinates to drop the arm'''
         self.current_idx += 1
@@ -78,7 +81,7 @@ class Movement():
 
 class Sensor():
     '''The sensor which determines the current error.
-    
+
     Args:
         path (Path): Expected welding path.
         movement (Movement): The actual movement of the robotic arm.
@@ -173,31 +176,98 @@ class Controller():
 
 
 class Calibration():
-    def __init__(self, num, movement_error, sensor_error):
-        self.num = num
-        self.movement_error = movement_error
-        self.sensor_error = sensor_error
-        self.Kp_range = np.linspace(0, 1, num=10)
-        self.Ki_range = np.linspace(0, 1, num=10)
-        self.lowest_rms_error = None
-        self.best_Kp = None
-        self.best_Ki = None
+    def __init__(self):
+    # def __init__(self, num, movement_error, sensor_error):
+        # Read the config file
+        with open('config.json', 'rb') as config_file:
+            config = json.load(config_file)
+        # Compute the config file checksum
+        self.config_checksum = hashlib.sha256(open('config.json', 'rb').read()).hexdigest()
+        self.num = config['num']
+        self.movement_error = config['movement_error']
+        self.sensor_error = config['sensor_error']
+        self.gradient_h = .1
+        self.learning_rate = .1
+        self.precision = .01
+        self.max_it = 50
+
+        # self.Kp_range = np.linspace(0, 1, num=10)
+        # self.Ki_range = np.linspace(0, 1, num=10)
+        # self.lowest_rms_error = None
+        # self.best_Kp = None
+        # self.best_Ki = None
+
+    def cost(self, Kp, Ki):
+        robot = Robot(self.num, self.movement_error, self.sensor_error, self.num, Kp, Ki)
+        robot.controller.toggle()
+        robot.start(interactive=False)
+        return robot.controller.rms_error
+
+    def gradient(self, Kp, Ki):
+        cost1_Kp = self.cost(Kp - self.gradient_h, Ki)
+        cost2_Kp = self.cost(Kp + self.gradient_h, Ki)
+        gradient_Kp = cost2_Kp - cost1_Kp / (2 * self.gradient_h)
+        cost1_Ki = self.cost(Kp, Ki - self.gradient_h)
+        cost2_Ki = self.cost(Kp, Ki + self.gradient_h)
+        gradient_Ki = cost2_Ki - cost1_Ki / (2 * self.gradient_h)
+        return gradient_Kp, gradient_Ki
+
+    def gradient_descent(self):
+        Kp = .5
+        Ki = .5
+        step_size_Kp = 1
+        step_size_Ki = 1
+        it = 0
+        while (step_size_Kp > self.precision or step_size_Ki > self.precision) and it < self.max_it:
+            Kp_prev = Kp
+            Ki_prev = Ki
+            gradient_Kp, gradient_Ki = self.gradient(Kp, Ki)
+            Kp = Kp - self.learning_rate * gradient_Kp
+            Ki = Ki - self.learning_rate * gradient_Ki
+            step_size_Kp = abs(Kp - Kp_prev)
+            step_size_Ki = abs(Ki - Ki_prev)
+            print('it={}, Kp={}, Ki={}, step_size_Kp={}, step_size_Ki={}'.format(it, Kp, Ki, step_size_Kp, step_size_Ki))
+            it += 1
+        return Kp, Ki
 
     def calibrate(self):
-        #TODO This currently sweeps out a huge grid. Switch to gradient descent if there's time.
-        it = 0
-        for Kp in self.Kp_range:
-            for Ki in self.Ki_range:
-                print('{}%'.format(100 * it / (len(self.Kp_range) * len(self.Ki_range))), end='')
-                robot = Robot(self.num, self.movement_error, self.sensor_error, self.num, Kp, Ki)
-                robot.controller.toggle()
-                robot.start(interactive=False)
-                if self.lowest_rms_error is None or robot.controller.rms_error < self.lowest_rms_error:
-                    self.lowest_rms_error = robot.controller.rms_error
-                    self.best_Kp = Kp
-                    self.best_Ki = Ki
-                print(' --- Kp={}, Ki={}'.format(self.best_Kp, self.best_Ki))
-                it += 1
+        # Tune Kp and Ki
+        Kp, Ki = self.gradient_descent()
+        # Create the calibration dictionary
+        cal = {
+            'config_checksum': self.config_checksum,
+            'Kp': Kp,
+            'Ki': Ki,
+        }
+        # Save the calibration data
+        with open('cal.json', 'w') as cal_file:
+            json.dump(cal, cal_file)
+
+    # def calibrate(self):
+    #     # Tune Kp and Ki
+    #     # TODO This currently sweeps out a huge grid. Switch to gradient descent if there's time.
+    #     it = 0
+    #     for Kp in self.Kp_range:
+    #         for Ki in self.Ki_range:
+    #             print('{}%'.format(100 * it / (len(self.Kp_range) * len(self.Ki_range))), end='')
+    #             robot = Robot(self.num, self.movement_error, self.sensor_error, self.num, Kp, Ki)
+    #             robot.controller.toggle()
+    #             robot.start(interactive=False)
+    #             if self.lowest_rms_error is None or robot.controller.rms_error < self.lowest_rms_error:
+    #                 self.lowest_rms_error = robot.controller.rms_error
+    #                 self.best_Kp = Kp
+    #                 self.best_Ki = Ki
+    #             print(' --- Kp={}, Ki={}'.format(self.best_Kp, self.best_Ki))
+    #             it += 1
+    #     # Create the calibration dictionary
+    #     cal = {
+    #         'config_checksum': self.config_checksum,
+    #         'Kp': self.best_Kp,
+    #         'Ki': self.best_Ki,
+    #     }
+    #     # Save the calibration data
+    #     with open('cal.json', 'w') as cal_file:
+    #         json.dump(cal, cal_file)
 
 
 class Robot():
@@ -239,7 +309,7 @@ class Robot():
             ax3.axvline(x=line_x, c=('green' if self.controller.on else 'red'))
             controller_btn.label.set_text('Turn control loop {}'.format('off' if self.controller.on else 'on'))
 
-        controller_btn = Button(ax3, 'Turn control loop on') 
+        controller_btn = Button(ax3, 'Turn control loop on')
         controller_btn.on_clicked(controller_toggle)
 
         while not self.movement.done:
@@ -251,7 +321,6 @@ class Robot():
             ax1.scatter(self.movement.x[idx], self.movement.y[idx], c='blue')
             ax2.scatter(self.movement.x[idx], abs(self.sensor.difference), c='red')
             plt.pause(self.delay)
-            time.sleep(self.delay / 100)
         plt.show()
 
     def start(self, interactive=True):
@@ -272,6 +341,35 @@ class Robot():
         controller_thread.join()
 
 
-# if __name__ == '__main__':
-#     robot = Robot(num=120, movement_error=.2, sensor_error=.01, freq=5, Kp=1, Ki=.5)
-#     robot.start()
+if __name__ == '__main__':
+    # Get command line arguments
+    parser = argparse.ArgumentParser()
+    run_type = parser.add_mutually_exclusive_group(required=True)
+    run_type.add_argument('--run', action='store_true')
+    run_type.add_argument('--calibrate', action='store_true')
+    args = parser.parse_args()
+    if args.run:
+        # Read the calibration file
+        with open('cal.json', 'rb') as cal_file:
+            cal = json.load(cal_file)
+        # Check whether the config has changed since the last calibration
+        config_checksum = hashlib.sha256(open('config.json', 'rb').read()).hexdigest()
+        if config_checksum != cal['config_checksum']:
+            proceed = input('Calibration may be out of date. Do you want to continue? [y/N]\n')
+            if proceed.lower() != 'y':
+                exit()
+        # Read the config file
+        with open('config.json', 'rb') as config_file:
+            config = json.load(config_file)
+        robot = Robot(
+                    num=config['num'], 
+                    movement_error=config['movement_error'],
+                    sensor_error=config['sensor_error'], 
+                    freq=config['freq'], 
+                    Kp=cal['Kp'], 
+                    Ki=cal['Ki']
+                    )
+        robot.start()
+    if args.calibrate:
+        calibration = Calibration()
+        calibration.calibrate()

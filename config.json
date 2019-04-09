@@ -1,0 +1,6 @@
+{
+  "num": 1000,
+  "movement_error": 0.1,
+  "sensor_error": 0.01,
+  "freq": 100
+}
