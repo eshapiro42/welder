@@ -19,6 +19,8 @@ This has been tested only on Ubuntu 18.04 with Python 3.6.
 
 The ```--run``` flag will run the machine using the current configuration and calibration data. The controller is off by default, but the giant button at the bottom of the screen will toggle it on/off.
 
-![screenshot](/screenshot.PNG)
-
 The ```--calibrate``` flag will calibrate the controller parameters according to the current configuration data. **This will take a long time, so run it overnight if possible.**
+
+Example output:
+
+![screenshot](/screenshot.PNG)
