@@ -47,7 +47,9 @@ class Robot():
         '''Plot the current state'''
         fig, (ax1, ax2, ax3) = plt.subplots(3, 1)
         ax1.plot(self.path.x, self.path.y, c='black')
+        ax1.set_title('Actual Path vs Expected Path')
         ax2.set_xlim(0, 100)
+        ax2.set_title('Sensor Data')
         ax3.set_xlim(0, 100)
 
         def controller_toggle(event):
