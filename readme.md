@@ -6,7 +6,7 @@
 
 # Setup
 
-This has been tested only on Ubuntu with Python 3.6.
+This has been tested only on Ubuntu 18.04 with Python 3.6.
 
 1. Clone this repository and navigate into it.
 2. Run ```pip install -r requirements.txt```.
