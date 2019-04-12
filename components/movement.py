@@ -12,7 +12,6 @@ class Movement():
 
     Attributes:
         path (Path): Expected welding path.
-        dataframe (pd.DataFrame): Time series database.
         movement_error (float): Standard deviation of the arm's error (which is normally distributed).
         delay (float): Time in seconds between evaluations.
         current_idx (int): Current index in the path array.
@@ -22,7 +21,7 @@ class Movement():
         x (np.array): The x-coordinates of the arm.
         y (np.array): The y-coordinates of the arm.
     '''
-    def __init__(self, path, dataframe, movement_error, delay):
+    def __init__(self, path, movement_error, delay):
         self.path = path
         self.movement_error = movement_error
         self.delay = delay
